@@ -1,1 +1,1 @@
-# DensePassageRetrival
+# DensePassageRetrieval
