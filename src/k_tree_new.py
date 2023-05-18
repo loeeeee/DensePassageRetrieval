@@ -5,29 +5,47 @@ import numpy as np
 from tqdm import tqdm
 
 class KTree:
-    def __init__(self, k: int, vectors: np.array, depth: int) -> None:
+    def __init__(self, k: int, vectors: np.array, depth: int=0, min_cluster: int=0) -> None:
         self.vectors = vectors
         self.k = k
         self.depth = depth
+
+        # Force stop clustering even if the depth is not reached
+        if min_cluster == 0:
+            self.min_cluster = 20 * math.log(vectors.shape[0])
+        else:
+            # Skip min_cluster if the min_cluster is smaller than 0
+            self.min_cluster = min_cluster
+
+        """
+        # Force continuous clustering even if the depth is reached
+        if max_cluster == 0:
+            self.max_cluster = 40 * math.log(vectors.shape[0])
+        else:
+            self.max_cluster = max_cluster
+        """
+
+        # runtime
         self.root = None
 
     def construct(self):
         leaf_node = KTreeLeaf(self.k, self.vectors)
-        branches = leaf_node.extrusion()
+        branches = leaf_node.extrusion(self.min_cluster)
         self.root = KTreeBranch(child_branches=branches)
-        for i in range(self.depth-1):
+        for i in range(self.depth-1): # Depth minus one because root has one unit of depth
             temp_branches = []
             for branch in branches:
-                new_layer_branches: list[KTreeBranch] = branch.child_leaf.extrusion()
+                if isinstance(branch, KTreeBranch):
+                    continue
+                new_layer_branches: list[KTreeBranch] = branch.child_leaf.extrusion(self.min_cluster)
                 branch.child_branches = new_layer_branches
                 temp_branches.extend(new_layer_branches)
                 branch.child_leaf = None
-            branches = temp_branches.copy()
-            
-    
+            branches = [j for j in temp_branches]
+
     def search(self, vector: np.array) -> list:
         branches = self.root.child_branches
-        for i in range(self.depth):
+        while(isinstance(branches, KTreeBranch)):
             min_distance = 0x3f3f3f3f
             flag = -1
             for j, branch in enumerate(branches):
@@ -36,9 +54,8 @@ class KTree:
                     min_distance = distance
                 #print(f"Distance with branch {j}: {distance}")
             #print()
-            if i == self.depth - 1:
-                leaf = branches[0].child_leaf
             branches = branches[flag].child_branches
+        leaf = branches[0].child_leaf
         return leaf.vectors
     
     def print(self):
@@ -58,7 +75,7 @@ class KTreeBranch:
         self.center_point = center_point
 
     def distance_to_center_point(self, vector: np.array) -> None:
-        return np.linalg.norm(vector - self.center_point)
+        return np.dot(vector, self.center_point)
 
 
 class KTreeLeaf:
@@ -91,15 +108,25 @@ class KTreeLeaf:
         self._temp_vectors = []
     
     def distance_to_center_point(self, vector: np.array) -> None:
-        return np.linalg.norm(vector - self.center_point)
+        return np.dot(vector, self.center_point)
 
-    def extrusion(self, max_iter: int = 100) -> KTreeBranch:
+    def extrusion(self, min_cluster: int, max_iter: int = 100) -> KTreeBranch:
         """
         Do KNN optimization
         Return KTreeBranch that connected to lower layer KTreeLeaf
         """
+        # No extrusion if child is less than something
+        if min_cluster < 0:
+            # Does not consider minimum clustering size
+            pass
+        elif self.vectors.shape[0] < min_cluster:
+            # If current leaf does not reach the minimum clustering size limit
+            temp = KTreeLeaf(self.k, self.vectors)
+            temp.update_center_point()
+            return [KTreeBranch(child_leaf = temp, center_point=temp.center_point)]
+
         # Extrusion
-        leaves = [KTreeLeaf(self.k,
+        leaves = [KTreeBranch(self.k,
                             self.vectors[\
                                 int(self.vectors.shape[0]*(i)/self.k)\
                                     :int(self.vectors.shape[0]*(i+1)/self.k), :])\
