@@ -6,8 +6,6 @@ The KMeansTree is the demo implementation for project **Enhancing Dense Retrieva
 
 The benchmark is for KMeansTree's implementation.
 
-See report [here](http://doc.searchso.cn/docs/EDRFHC.html)
-
 ## Usage
 
 ### init
